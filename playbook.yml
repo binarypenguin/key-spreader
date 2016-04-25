@@ -1,0 +1,12 @@
+---
+- hosts: all
+  vars_prompt:
+  - name: "username"
+    prompt: "What is your username?"
+    private: no
+
+  tasks:
+  - name: Gather and distribute SSH public keys
+    authorized_key: user={{ username }} key="{{ lookup('file', item) }}" state=present
+    with_fileglob:
+       - keys/*.pub
