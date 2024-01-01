@@ -1,12 +1,57 @@
 ---
 - hosts: all
-  vars_prompt:
-  - name: "username"
-    prompt: "What is your username?"
-    private: no
-
   tasks:
-  - name: Gather and distribute SSH public keys
-    authorized_key: user={{ username }} key="{{ lookup('file', item) }}" state=present
-    with_fileglob:
-       - keys/*.pub
+  # Check Version
+  - name: Get OpenSSH version
+    shell: 'ssh -V 2>&1 | grep "OpenSSH" | sed -n "s/.*OpenSSH_\([0-9.]*\).*/\1/p"'
+    register: openssh_version
+
+  - name: Get Support Key Types
+    shell: 'ssh -Q key 2>&1'
+    register: openssh_keytypes
+
+  - name: Handle sk-ssh-ed25519 keys (Hardware Keys)
+    block:  
+      - name: Check if sk-ssh-ed25519 keys are supported
+        ansible.builtin.debug:
+          msg:
+            - "OpenSSH Version '{{ openssh_version.stdout }}'. This host supports sk-ssh-ed25519 keys!."
+      - name: Gather and distribute sk-ssh-ed25519 SSH public keys.
+        ansible.posix.authorized_key: user={{ ansible_user_id }} key="{{ lookup('file', item) }}" state=present
+        with_fileglob:
+          - keys/id_ed25519_sk_rk*.pub
+          - keys/id_ed25519_juicessh*.pub # Include Mobile Keys Always
+    when: "'sk-ssh-ed25519@openssh.com' in openssh_keytypes.stdout_lines"
+
+  - name: Handle ssh-ed25519 keys
+    block:  
+      - name: Check if ed25519 keys are supported
+        ansible.builtin.debug:
+          msg:
+            - "OpenSSH Version '{{ openssh_version.stdout }}'. This host supports ed25519 keys!."
+      - name: Gather and distribute ed25519 SSH public keys.
+        ansible.posix.authorized_key: user={{ ansible_user_id }} key="{{ lookup('file', item) }}" state=present
+        with_fileglob:
+          - keys/id_ed25519*.pub
+    # This will deploy hardware keys regardless if they work because of file naming. This will not break anything.
+    when: "'ssh-ed25519' in openssh_keytypes.stdout_lines and not 'sk-ssh-ed25519@openssh.com' in openssh_keytypes.stdout_lines"
+
+  - name: Handle RSA Keys (Fallback)
+    block: 
+      - name: Fall back to RSA keys
+        ansible.builtin.debug:
+          msg:
+            - "OpenSSH Version '{{ openssh_version.stdout }}'. This host will not support any ed25519 key types!!!!."
+      - name: Gather and distribute RSA SSH public keys
+        ansible.posix.authorized_key: user={{ ansible_user_id }} key="{{ lookup('file', item) }}" state=present
+        with_fileglob:
+          - keys/id_rsa*.pub
+    when: "'ssh-ed25519' not in openssh_keytypes.stdout_lines and 'sk-ssh-ed25519@openssh.com' not in openssh_keytypes.stdout_lines"
+
+  - name: Handle RSA Key Removal (When either ed25519 key types are supported)
+    block: 
+      - name: Gather and remove RSA SSH public keys
+        ansible.posix.authorized_key: user={{ ansible_user_id }} key="{{ lookup('file', item) }}" state=absent
+        with_fileglob:
+          - keys/id_rsa*.pub
+    when: "'ssh-ed25519' in openssh_keytypes.stdout_lines or 'sk-ssh-ed25519@openssh.com' in openssh_keytypes.stdout_lines"
