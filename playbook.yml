@@ -3,7 +3,7 @@
   hosts: all
   tasks:
     # Check Version
-    - name: Get OpenSSH version
+    - name: Get OpenSSH version. Testing to see if this works.
       ansible.builtin.shell:
         cmd: |
           set -o pipefail
