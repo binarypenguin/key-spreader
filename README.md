@@ -2,7 +2,7 @@
 A simple ansible playbook the distributes your ssh keys to a list of hosts. This is intended to be ran by the end user and is not for bulk user key deployment.
 
 # Dependencies
-* Ansible 2.16.2
+* Ansible Core 2.17.4
 
 # Getting Started
 * Clone this repo
